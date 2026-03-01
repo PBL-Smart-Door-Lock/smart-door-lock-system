@@ -1,18 +1,21 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
 import {
-    ScanFace,
-    ShieldCheck,
-    AlertTriangle,
     Users,
     Activity,
+    UserCheck,
+    UserX,
     Clock,
-    TrendingUp,
-    Zap,
+    Calendar,
+    Cpu,
+    Database,
     Wifi,
     Thermometer,
-    HardDrive,
-    Cpu,
-} from 'lucide-react'
+    ShieldCheck,
+    AlertTriangle,
+    ScanFace,
+    TrendingUp,
+    ChevronRight
+} from 'lucide-react';
 import {
     AreaChart,
     Area,
@@ -26,139 +29,162 @@ import {
     PieChart,
     Pie,
     Cell,
-} from 'recharts'
+    Legend
+} from 'recharts';
+import { db } from '../firebase';
+import { ref, onValue, limitToLast, query } from 'firebase/database';
 
-const accessData = [
-    { time: '00:00', berhasil: 2, gagal: 0 },
-    { time: '04:00', berhasil: 1, gagal: 0 },
-    { time: '06:00', berhasil: 8, gagal: 1 },
-    { time: '07:00', berhasil: 15, gagal: 2 },
-    { time: '08:00', berhasil: 24, gagal: 3 },
-    { time: '09:00', berhasil: 18, gagal: 1 },
-    { time: '10:00', berhasil: 12, gagal: 0 },
-    { time: '11:00', berhasil: 14, gagal: 1 },
-    { time: '12:00', berhasil: 22, gagal: 2 },
-    { time: '13:00', berhasil: 16, gagal: 0 },
-    { time: '14:00', berhasil: 10, gagal: 1 },
-    { time: '15:00', berhasil: 8, gagal: 0 },
-    { time: '16:00', berhasil: 12, gagal: 1 },
-    { time: '17:00', berhasil: 20, gagal: 2 },
-    { time: '18:00', berhasil: 18, gagal: 1 },
-    { time: '20:00', berhasil: 6, gagal: 0 },
-    { time: '22:00', berhasil: 3, gagal: 0 },
-]
-
-const weeklyData = [
-    { day: 'Sen', akses: 45 },
-    { day: 'Sel', akses: 52 },
-    { day: 'Rab', akses: 48 },
-    { day: 'Kam', akses: 61 },
-    { day: 'Jum', akses: 55 },
-    { day: 'Sab', akses: 32 },
-    { day: 'Min', akses: 28 },
-]
-
-const methodData = [
-    { name: 'Face Recognition', value: 78, color: '#06b6d4' },
-    { name: 'RFID', value: 12, color: '#8b5cf6' },
-    { name: 'PIN', value: 7, color: '#f59e0b' },
-    { name: 'Remote (App)', value: 3, color: '#10b981' },
-]
-
-const recentAccess = [
-    { name: 'Indra Hermawan', method: 'Face', time: '2 menit lalu', status: 'granted', confidence: '99.2%' },
-    { name: 'Ahmad Fauzi', method: 'Face', time: '15 menit lalu', status: 'granted', confidence: '98.7%' },
-    { name: 'Unknown', method: 'Face', time: '23 menit lalu', status: 'denied', confidence: '34.1%' },
-    { name: 'Sarah Putri', method: 'RFID', time: '45 menit lalu', status: 'granted', confidence: '-' },
-    { name: 'Budi Santoso', method: 'Face', time: '1 jam lalu', status: 'granted', confidence: '97.8%' },
-    { name: 'Dewi Lestari', method: 'PIN', time: '1.5 jam lalu', status: 'granted', confidence: '-' },
-]
-
-const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-        return (
-            <div
-                style={{
-                    background: 'rgba(17, 24, 39, 0.95)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '12px 16px',
-                    backdropFilter: 'blur(12px)',
-                }}
-            >
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginBottom: 6 }}>
-                    {label}
-                </p>
-                {payload.map((p, i) => (
-                    <p key={i} style={{ color: p.color, fontSize: '0.85rem', fontWeight: 600 }}>
-                        {p.name}: {p.value}
-                    </p>
-                ))}
-            </div>
-        )
-    }
-    return null
-}
-
-export default function Dashboard() {
-    const [currentTime, setCurrentTime] = useState(new Date())
+const Dashboard = () => {
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [stats, setStats] = useState({
+        totalAkses: 1247,
+        successRate: 98.4,
+        failedAttempts: 24,
+        registeredUsers: 12
+    });
+    const [accessLogs, setAccessLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const interval = setInterval(() => setCurrentTime(new Date()), 1000)
-        return () => clearInterval(interval)
-    }, [])
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const logsRef = query(ref(db, 'access_logs'), limitToLast(6));
+        const unsubscribeLogs = onValue(logsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const logsArray = Object.keys(data).map(key => ({
+                    id: key,
+                    ...data[key]
+                })).reverse();
+                setAccessLogs(logsArray);
+            }
+            setLoading(false);
+        });
+
+        const statsRef = ref(db, 'system_stats');
+        const unsubscribeStats = onValue(statsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setStats(prev => ({ ...prev, ...snapshot.val() }));
+            }
+        });
+
+        return () => {
+            unsubscribeLogs();
+            unsubscribeStats();
+        };
+    }, []);
+
+    const formatTime = (date) => {
+        return date.toLocaleTimeString('id-ID', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).replace(/:/g, '.');
+    };
+
+    const formatDate = (date) => {
+        return date.toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
+
+    const activityData = [
+        { time: '00:00', success: 20, failed: 2 },
+        { time: '04:00', success: 15, failed: 1 },
+        { time: '08:00', success: 85, failed: 5 },
+        { time: '12:00', success: 120, failed: 8 },
+        { time: '16:00', success: 95, failed: 4 },
+        { time: '20:00', success: 60, failed: 3 },
+        { time: '23:59', success: 30, failed: 1 },
+    ];
+
+    const weeklyData = [
+        { day: 'Sen', value: 45 },
+        { day: 'Sel', value: 52 },
+        { day: 'Rab', value: 48 },
+        { day: 'Kam', value: 61 },
+        { day: 'Jum', value: 55 },
+        { day: 'Sab', value: 32 },
+        { day: 'Min', value: 28 },
+    ];
+
+    const authMethods = [
+        { name: 'Face Recognition', value: 78, color: '#06b6d4' },
+        { name: 'RFID', value: 12, color: '#8b5cf6' },
+        { name: 'PIN', value: 7, color: '#f59e0b' },
+        { name: 'Remote (App)', value: 3, color: '#10b981' },
+    ];
+
+    const displayLogs = accessLogs.length > 0 ? accessLogs : [
+        { id: 1, name: 'Indra Hermawan', method: 'FACE', confidence: '99.2%', time: '2 menit lalu', status: 'GRANTED' },
+        { id: 2, name: 'Ahmad Fauzi', method: 'FACE', confidence: '98.7%', time: '15 menit lalu', status: 'GRANTED' },
+        { id: 3, name: 'Unknown', method: 'FACE', confidence: '34.1%', time: '23 menit lalu', status: 'DENIED' },
+        { id: 4, name: 'Sarah Putri', method: 'RFID', confidence: '-', time: '45 menit lalu', status: 'GRANTED' },
+        { id: 5, name: 'Budi Santoso', method: 'FACE', confidence: '97.8%', time: '1 jam lalu', status: 'GRANTED' },
+        { id: 6, name: 'Dewi Lestari', method: 'PIN', confidence: '-', time: '1.5 jam lalu', status: 'GRANTED' },
+    ];
 
     return (
         <div className="page-container">
             <div className="page-header">
                 <div className="page-breadcrumb">
-                    Smart Door Lock <ChevronRight /> <span>Dashboard</span>
+                    Smart Door Lock <ChevronRight size={14} /> <span>Dashboard</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                         <h2>Dashboard Monitoring</h2>
-                        <p>Pantau aktivitas akses dan status sistem secara real-time</p>
+                        <p className="subtitle">Pantau aktivitas akses dan status sistem secara real-time</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--color-text-accent)' }}>
-                            {currentTime.toLocaleTimeString('id-ID')}
+                            {formatTime(currentTime)}
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                            {currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            {formatDate(currentTime)}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Stat Cards */}
+            {/* Stats Grid */}
             <div className="grid-4" style={{ marginBottom: 'var(--space-xl)' }}>
                 <div className="card stat-card animate-in animate-delay-1">
-                    <div className="stat-icon cyan"><ScanFace size={24} /></div>
-                    <div className="stat-value">1,247</div>
+                    <div className="stat-icon cyan"><Activity size={24} /></div>
+                    <div className="stat-value">{stats.totalAkses.toLocaleString()}</div>
                     <div className="stat-label">Total Akses Hari Ini</div>
                     <div className="stat-change positive">
                         <TrendingUp size={12} /> +12.5%
                     </div>
                 </div>
+
                 <div className="card stat-card animate-in animate-delay-2">
                     <div className="stat-icon green"><ShieldCheck size={24} /></div>
-                    <div className="stat-value">98.4%</div>
+                    <div className="stat-value">{stats.successRate}%</div>
                     <div className="stat-label">Tingkat Keberhasilan</div>
                     <div className="stat-change positive">
                         <TrendingUp size={12} /> +2.1%
                     </div>
                 </div>
+
                 <div className="card stat-card animate-in animate-delay-3">
                     <div className="stat-icon amber"><AlertTriangle size={24} /></div>
-                    <div className="stat-value">3</div>
+                    <div className="stat-value">{stats.failedAttempts}</div>
                     <div className="stat-label">Percobaan Gagal</div>
                     <div className="stat-change negative">
-                        <TrendingUp size={12} /> -15.3%
+                        <TrendingUp size={12} /> -15%
                     </div>
                 </div>
+
                 <div className="card stat-card animate-in animate-delay-4">
                     <div className="stat-icon purple"><Users size={24} /></div>
-                    <div className="stat-value">24</div>
+                    <div className="stat-value">{stats.registeredUsers}</div>
                     <div className="stat-label">Pengguna Terdaftar</div>
                     <div className="stat-change positive">
                         <TrendingUp size={12} /> +3
@@ -166,10 +192,9 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Charts */}
             <div className="grid-2" style={{ marginBottom: 'var(--space-xl)' }}>
-                {/* Access Chart */}
-                <div className="card">
+                {/* Main Activity Chart */}
+                <div className="card animate-in">
                     <div className="card-header">
                         <div>
                             <div className="card-title">Aktivitas Akses (24 Jam)</div>
@@ -177,92 +202,85 @@ export default function Dashboard() {
                         </div>
                         <Activity size={20} style={{ color: 'var(--color-text-muted)' }} />
                     </div>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <AreaChart data={accessData}>
-                            <defs>
-                                <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                                </linearGradient>
-                                <linearGradient id="colorFail" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                            <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
-                            <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Area
-                                type="monotone"
-                                dataKey="berhasil"
-                                name="Berhasil"
-                                stroke="#06b6d4"
-                                fill="url(#colorSuccess)"
-                                strokeWidth={2}
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="gagal"
-                                name="Gagal"
-                                stroke="#ef4444"
-                                fill="url(#colorFail)"
-                                strokeWidth={2}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    <div style={{ height: 250, marginTop: 20 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={activityData}>
+                                <defs>
+                                    <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" vertical={false} />
+                                <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
+                                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                                />
+                                <Area type="monotone" dataKey="success" stroke="#06b6d4" fillOpacity={1} fill="url(#colorSuccess)" name="Berhasil" />
+                                <Area type="monotone" dataKey="failed" stroke="#ef4444" fillOpacity={0} name="Gagal" strokeDasharray="5 5" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
                 {/* Weekly Bar Chart */}
-                <div className="card">
+                <div className="card animate-in">
                     <div className="card-header">
                         <div>
-                            <div className="card-title">Akses Mingguan</div>
+                            <div className="card-title">Aktivitas Mingguan</div>
                             <div className="card-subtitle">Total akses per hari dalam seminggu terakhir</div>
                         </div>
                         <Clock size={20} style={{ color: 'var(--color-text-muted)' }} />
                     </div>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={weeklyData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                            <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} />
-                            <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="akses" name="Akses" fill="#06b6d4" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                    <div style={{ height: 250, marginTop: 20 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={weeklyData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" vertical={false} />
+                                <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} />
+                                <YAxis stroke="#64748b" hide />
+                                <Tooltip
+                                    cursor={{ fill: 'rgba(30,41,59,0.5)' }}
+                                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                                />
+                                <Bar dataKey="value" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
 
             <div className="grid-3" style={{ marginBottom: 'var(--space-xl)' }}>
-                {/* Auth Method Pie */}
-                <div className="card">
+                {/* Auth Method Distribution */}
+                <div className="card animate-in">
                     <div className="card-header">
                         <div>
                             <div className="card-title">Metode Autentikasi</div>
                             <div className="card-subtitle">Distribusi metode akses</div>
                         </div>
                     </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                            <Pie
-                                data={methodData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={50}
-                                outerRadius={80}
-                                paddingAngle={4}
-                                dataKey="value"
-                            >
-                                {methodData.map((entry, i) => (
-                                    <Cell key={i} fill={entry.color} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-                        {methodData.map((m) => (
+                    <div style={{ height: 250 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={authMethods}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {authMethods.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: 10 }}>
+                        {authMethods.map((m) => (
                             <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
                                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color }} />
                                 <span style={{ color: 'var(--color-text-secondary)' }}>{m.name} ({m.value}%)</span>
@@ -271,35 +289,35 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Recent Access */}
-                <div className="card" style={{ gridColumn: 'span 2' }}>
+                {/* Recent Access List */}
+                <div className="card grid-span-2 animate-in shadow-card glass">
                     <div className="card-header">
                         <div>
                             <div className="card-title">Akses Terbaru</div>
-                            <div className="card-subtitle">6 aktivitas akses terakhir</div>
+                            <p className="card-subtitle">6 aktivitas akses terakhir secara real-time</p>
                         </div>
                     </div>
-                    <div className="table-container">
-                        <table>
+                    <div className="table-wrapper" style={{ marginTop: 20 }}>
+                        <table className="log-table">
                             <thead>
                                 <tr>
-                                    <th>Nama</th>
-                                    <th>Metode</th>
-                                    <th>Confidence</th>
-                                    <th>Waktu</th>
-                                    <th>Status</th>
+                                    <th>NAMA</th>
+                                    <th>METODE</th>
+                                    <th>CONFIDENCE</th>
+                                    <th>WAKTU</th>
+                                    <th>STATUS</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {recentAccess.map((a, i) => (
-                                    <tr key={i}>
-                                        <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{a.name}</td>
-                                        <td><span className="badge badge-info">{a.method}</span></td>
-                                        <td style={{ fontFamily: 'var(--font-mono)' }}>{a.confidence}</td>
-                                        <td>{a.time}</td>
+                                {displayLogs.map((log) => (
+                                    <tr key={log.id}>
+                                        <td className="font-bold">{log.name}</td>
+                                        <td><span className="badge-method">{log.method}</span></td>
+                                        <td>{log.confidence}</td>
+                                        <td className="text-secondary">{log.time || new Date(log.timestamp).toLocaleTimeString('id-ID')}</td>
                                         <td>
-                                            <span className={`badge ${a.status === 'granted' ? 'badge-success' : 'badge-danger'}`}>
-                                                {a.status === 'granted' ? '✓ Granted' : '✕ Denied'}
+                                            <span className={`status-badge ${log.status === 'GRANTED' ? 'success' : 'danger'}`}>
+                                                {log.status === 'GRANTED' ? '✓ GRANTED' : '✕ DENIED'}
                                             </span>
                                         </td>
                                     </tr>
@@ -310,51 +328,67 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* System Status */}
-            <div className="card">
+            {/* System Health Section */}
+            <div className="card shadow-card glass animate-in">
                 <div className="card-header">
                     <div>
-                        <div className="card-title">Status Sistem</div>
-                        <div className="card-subtitle">Monitoring hardware dan koneksi real-time</div>
+                        <div className="card-title">Status Sistem & Hardware</div>
+                        <p className="card-subtitle">Kesehatan perangkat keras dan konektivitas</p>
                     </div>
-                    <span className="badge badge-success">● Online</span>
                 </div>
-                <div className="grid-4">
-                    <SystemMetric icon={<Cpu size={20} />} label="CPU Usage" value="23%" color="cyan" />
-                    <SystemMetric icon={<HardDrive size={20} />} label="RAM Usage" value="156 MB" color="green" />
-                    <SystemMetric icon={<Wifi size={20} />} label="WiFi Signal" value="-42 dBm" color="blue" />
-                    <SystemMetric icon={<Thermometer size={20} />} label="Temperatur" value="38°C" color="amber" />
+
+                <div className="grid-4" style={{ marginTop: 20 }}>
+                    <div className="health-item">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <Cpu size={18} color="#06b6d4" />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>CPU Usage</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div className="progress-bar-container" style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3 }}>
+                                <div className="progress-bar" style={{ width: '42%', height: '100%', background: 'var(--gradient-primary)', borderRadius: 3 }}></div>
+                            </div>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-accent)', fontWeight: 600 }}>42%</span>
+                        </div>
+                    </div>
+
+                    <div className="health-item">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <Database size={18} color="#8b5cf6" />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>RAM Usage</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div className="progress-bar-container" style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3 }}>
+                                <div className="progress-bar" style={{ width: '68%', height: '100%', background: 'linear-gradient(90deg, #8b5cf6, #d946ef)', borderRadius: 3 }}></div>
+                            </div>
+                            <span style={{ fontSize: '0.8rem', color: '#d946ef', fontWeight: 600 }}>642MB</span>
+                        </div>
+                    </div>
+
+                    <div className="health-item">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <Wifi size={18} color="#10b981" />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Network Status</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="status-dot pulse" style={{ background: '#10b981' }}></div>
+                            <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600 }}>Online (12ms)</span>
+                        </div>
+                    </div>
+
+                    <div className="health-item">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <Thermometer size={18} color="#f59e0b" />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Suhu Core</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '1rem', fontWeight: 700 }}>42°C</span>
+                            <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 600 }}>NORMAL</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    )
-}
+    );
+};
 
-function SystemMetric({ icon, label, value, color }) {
-    return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '12px',
-            background: 'var(--color-bg-tertiary)',
-            borderRadius: 'var(--radius-md)',
-        }}>
-            <div className={`stat-icon ${color}`} style={{ width: 40, height: 40, marginBottom: 0 }}>
-                {icon}
-            </div>
-            <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{label}</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{value}</div>
-            </div>
-        </div>
-    )
-}
-
-function ChevronRight() {
-    return (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 18 6-6-6-6" />
-        </svg>
-    )
-}
+export default Dashboard;

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  smart-door-lock-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Mapping port 5173 di host ke port 5173 di container
+      - "5173:5173"
+    volumes:
+      # Sync source code (Hot Reloading) tanpa copy node_modules
+      - .:/app
+      - /app/node_modules
+    env_file:
+      # Menggunakan environment variable dari .env (jika ada)
+      - .env
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Penting untuk hot-reload di Windows
